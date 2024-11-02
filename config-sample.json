@@ -1,0 +1,56 @@
+[
+    {
+        "filename": "newlbs",
+        "file_header_comment": "LBS Service",
+        "prefix": "ABC",
+        "base_uuid": "xxxxxxxx-1212-efde-1523-785feabcd123",
+
+        "service": {
+            "name": "LBS",
+            "comment": "LED Button Service",
+            "uuid": "00001523"
+        },
+        "characteristics": [
+            {
+                "name": "BUTTON",
+                "comment": "Button characteristic",
+                "uuid": "00001524",
+                "read": {
+                    "enable": true,
+                    "polling": true
+                },
+                "write": {
+                    "enable": false
+                },
+                "notification": true,
+                "indication": false
+            },
+            {
+                "name": "LED",
+                "comment": "LED characteristic",
+                "uuid": "00001525",
+                "read": {
+                    "enable": false
+                },
+                "write": {
+                    "enable": true
+                },
+                "notification": false,
+                "indication": false
+            }
+        ]
+    },
+    {
+        "filename": "pwr",
+        "file_header_comment": "",
+        "prefix": "",
+        "base_uuid": "xxxxxxxx-1212-efde-1523-785feabcd123",
+
+        "service": {
+            "name": "PWR",
+            "comment": "Power Service",
+            "uuid": "00001523"
+        },
+        "characteristics": []
+    }
+]
