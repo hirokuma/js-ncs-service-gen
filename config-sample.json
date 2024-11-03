@@ -12,25 +12,37 @@
             {
                 "name": "button",
                 "uuid": "00001524",
-                "read": {
-                    "enable": true
-                },
                 "write": {
                     "enable": false
                 },
-                "notification": true,
-                "indication": false
+                "read": {
+                    "enable": true
+                },
+                "notification": false,
+                "indication": true
             },
             {
                 "name": "led",
                 "uuid": "00001525",
-                "read": {
-                    "enable": false
-                },
                 "write": {
                     "enable": true
                 },
+                "read": {
+                    "enable": true
+                },
                 "notification": false,
+                "indication": false
+            },
+            {
+                "name": "mysensor",
+                "uuid": "00001526",
+                "write": {
+                    "enable": false
+                },
+                "read": {
+                    "enable": false
+                },
+                "notification": true,
                 "indication": false
             }
         ]

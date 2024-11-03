@@ -3,6 +3,9 @@ const fs = require('fs');
 const confText = fs.readFileSync('config-sample.json', 'utf-8');
 const conf = JSON.parse(confText);
 
+const serviceCbTypeName = (serviceName) => `struct ${serviceName.toLowerCase()}_cb`;
+const serviceCbValueName = (serviceName) => `${serviceName.toLowerCase()}_cb`;
+
 function generateHeaderFile(conf) {
     const headerFile = fs.createWriteStream('generated/' + conf.filename + '.h');
 
@@ -38,25 +41,39 @@ extern "C" {
 `
     );
 
-    const charCbNames = new Map();
+    const charCbNames = [];
     for (const ch of conf.characteristics) {
-        const charName = `${ch.name.toLowerCase()}_cb`;
-        charCbNames.set(ch.name, charName);
+        const charName = ch.name.toLowerCase();
+        const charUpperName = ch.name.toUpperCase();
+        const charCbName = (rw) => `${charName}_${rw}_cb`;
+        const charCbTypeName = (rw) => `${charCbName(rw)}_t`;
 
-        headerFile.write(`/// @brief Callback type for ${ch.name} Characteristic.
+        if (ch.write?.enable) {
+            headerFile.write(`/// @brief Write callback type for ${charUpperName} Characteristic.
 // TODO: Modifying parameters
-typedef int (*${charName}_t)(const uint8_t *data, uint16_t len);
+typedef int (*${charCbTypeName('write')})(const uint8_t *data, uint16_t len);
 
 `
-        );
+            );
+            charCbNames.push(charCbName('write'));
+        }
+        if (ch.read?.enable) {
+            headerFile.write(`/// @brief Read callback type for ${charUpperName} Characteristic.
+// TODO: Modifying parameters
+typedef int (*${charCbTypeName('read')})(const uint8_t *data, uint16_t len);
+
+`
+            );
+            charCbNames.push(charCbName('read'));
+        }
     }
 
     headerFile.write(`/// @brief Callback struct used by the ${serviceUpperName} Service.
-struct ${serviceLowerName}_cb {
+${serviceCbTypeName(serviceLowerName)} {
 `);
 
-    for (const cb of charCbNames.entries()) {
-        headerFile.write(`    ${cb[1]}_t ${cb[1]};\n`);
+    for (const cb of charCbNames) {
+        headerFile.write(`    ${cb}_t ${cb};\n`);
     }
 
     headerFile.write(`};
@@ -70,7 +87,7 @@ struct ${serviceLowerName}_cb {
     );
 
     headerFile.write(`/// @brief Initialize the ${serviceUpperName} Service.
-int ${serviceLowerName}_init(struct ${serviceLowerName}_cb *callbacks);
+int ${serviceLowerName}_init(${serviceCbTypeName(serviceLowerName)} *callbacks);
 
 `
     );
@@ -114,10 +131,18 @@ function generateSourceFile(conf) {
     const serviceUpperName = conf.service.name.toUpperCase();
     const serviceLowerName = conf.service.name.toLowerCase();
     const serviceUuidName = `UUID_${serviceUpperName}`;
+    const serviceDefValName = `${serviceUuidName}_VAL`;
+    const svcName = `${serviceLowerName}_svc`;
     const base_uuid = conf.base_uuid.split('-');
     const serviceUuid = Array.from(base_uuid);
     serviceUuid[0] = conf.service.uuid;
-    const cbValueName = `${serviceLowerName}_cb`;
+    const charCbName = (name, rw) => `${serviceCbValueName(serviceLowerName)}.${name}_${rw}_cb`;
+    const charNotify = (name) => `notify_${name}_enabled`;
+    const charIndicate = (name) => `indicate_${name}_enabled`;
+    const charIndicateParam = (name) => `indicate_${name}_params`;
+    const charStatus = (name) => `${name}_state`;
+    const charRead = (name) => `read_${name}`;
+    const charWrite = (name) => `write_${name}`;
 
     sourceFile.write(`/**
  * @file
@@ -148,21 +173,23 @@ LOG_MODULE_DECLARE(${conf.service.name}_Service);
  */
 
 /// @brief ${serviceUpperName} Service UUID
-#define ${serviceUuidName}_VAL
+#define ${serviceDefValName}
     BT_UUID_128_ENCODE(0x${serviceUuid[0]}, 0x${serviceUuid[1]}, 0x${serviceUuid[2]}, 0x${serviceUuid[3]}, 0x${serviceUuid[4]})
-#define ${serviceUuidName} BT_UUID_DECLARE_128(${serviceUuidName}_VAL)
+#define ${serviceUuidName} BT_UUID_DECLARE_128(${serviceDefValName})
 
 `);
 
     for (const ch of conf.characteristics) {
-        const charName = ch.name.toUpperCase();
+        const charUpperName = ch.name.toUpperCase();
         const uuid = Array.from(base_uuid);
         uuid[0] = ch.uuid;
+        const defDecName = `${serviceUuidName}_${charUpperName}`;
+        const defValName = `${defDecName}_VAL`;
 
-        sourceFile.write(`/// @brief ${charName} Characteristic UUID
-#define ${serviceUuidName}_${charName}_VAL
+        sourceFile.write(`/// @brief ${charUpperName} Characteristic UUID
+#define ${defValName}
     BT_UUID_128_ENCODE(0x${uuid[0]}, 0x${uuid[1]}, 0x${uuid[2]}, 0x${uuid[3]}, 0x${uuid[4]})
-#define ${serviceUuidName}_${charName} BT_UUID_DECLARE_128(${serviceUuidName}_${charName}_VAL)
+#define ${defDecName} BT_UUID_DECLARE_128(${defValName})
 
 `
         );
@@ -170,28 +197,34 @@ LOG_MODULE_DECLARE(${conf.service.name}_Service);
 
     for (const ch of conf.characteristics) {
         const charName = ch.name.toLowerCase();
+        const charUpperName = ch.name.toUpperCase();
 
-        if (ch.readable) {
+        if (ch.read?.enable) {
             sourceFile.write(`
+/// @brief ${charUpperName} Characteristic read status
 // TODO: Modify
-static uint8_t ${charName}_state[1];
+static uint8_t ${charStatus(charName)}[1];
 `
             );
         }
         if (ch.notification) {
-            sourceFile.write(`static bool notify_${charName}_enabled;
+            sourceFile.write(`/// @brief ${charUpperName} Characteristic notification flag
+static bool ${charNotify(charName)};
 `
             );
         }
         if (ch.indication) {
-            sourceFile.write(`static bool indicate_${charName}_enabled;
-static struct bt_gatt_indicate_params indicate_${charName}_params;
+            sourceFile.write(`/// @brief ${charUpperName} Characteristic indication flag
+static bool ${charIndicate(charName)};
+static struct bt_gatt_indicate_params ${charIndicateParam(charName)};
 `
             );
         }
     }
 
-    sourceFile.write(`static struct ${serviceLowerName}_cb ${cbValueName};
+    sourceFile.write(`
+/// @brief service callbacks
+static ${serviceCbTypeName(serviceLowerName)} ${serviceCbValueName(serviceLowerName)};
 
 
 `
@@ -201,20 +234,32 @@ static struct bt_gatt_indicate_params indicate_${charName}_params;
 
     for (const ch of conf.characteristics) {
         const charName = ch.name.toLowerCase();
+        const charUpperName = ch.name.toUpperCase();
 
         if (ch.notification) {
-            sourceFile.write(`static void ${serviceLowerName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
+            sourceFile.write(`/**
+ * Update ${charUpperName} notification flag.
+ */
+static void ${charName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
-    notify_${charName}_enabled = (value == BT_GATT_CCC_NOTIFY);
+    ${charNotify(charName)} = (value == BT_GATT_CCC_NOTIFY);
 }
 
 `
             );
         }
         if (ch.indication) {
-            sourceFile.write(`static void ${serviceLowerName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
+            sourceFile.write(`/**
+ * Update ${charUpperName} indication flag.
+ */
+static void ${charName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
-    indicate_${charName}_enabled = (value == BT_GATT_CCC_INDICATE);
+    ${charIndicate(charName)} = (value == BT_GATT_CCC_INDICATE);
+}
+
+static void ${charName}_indicate_callback(struct bt_conn *conn, struct bt_gatt_indicate_params *params, uint8_t err)
+{
+	LOG_DBG("Indication ${charUpperName} Characteristic %s\n", err != 0U ? "fail" : "success");
 }
 
 `
@@ -226,9 +271,13 @@ static struct bt_gatt_indicate_params indicate_${charName}_params;
 
     for (const ch of conf.characteristics) {
         const charName = ch.name.toLowerCase();
+        const charUpperName = ch.name.toUpperCase();
 
         if (ch.write?.enable) {
-            sourceFile.write(`static ssize_t write_${charName}(
+            sourceFile.write(`/**
+ * Callback application function triggered by writing to ${charUpperName} Characteristic.
+ */
+static ssize_t ${charWrite(charName)}(
     struct bt_conn *conn,
     const struct bt_gatt_attr *attr,
     const void *buf,
@@ -258,8 +307,8 @@ static struct bt_gatt_indicate_params indicate_${charName}_params;
     }
 
     // TODO: Modify callback
-    if (${cbValueName}.${charName}_cb) {
-        ${cbValueName}.${charName}_cb(data, len);
+    if (${charCbName(charName, 'write')}) {
+        ${charCbName(charName, 'write')}(data, len);
     }
 
     return len;
@@ -274,11 +323,13 @@ static struct bt_gatt_indicate_params indicate_${charName}_params;
 
     for (const ch of conf.characteristics) {
         const charName = ch.name.toLowerCase();
-        const macroName = `CONFIG_${serviceUpperName}_POLL_${charName.toUpperCase()}`;
+        const charUpperName = ch.name.toUpperCase();
 
         if (ch.read?.enable) {
-            sourceFile.write(`#ifdef ${macroName}
-static ssize_t read_${charName}(
+            sourceFile.write(`/**
+ * Callback application function triggered by reading ${charUpperName} Characteristic.
+ */
+static ssize_t ${charRead(charName)}(
     struct bt_conn *conn,
     const struct bt_gatt_attr *attr,
     void *buf,
@@ -291,15 +342,14 @@ static ssize_t read_${charName}(
     LOG_DBG("Attribute read ${charName}, handle: %u, conn: %p", attr->handle, (const void *)conn);
 
     // TODO: Modify callback
-    if (${cbValueName}.${charName}_cb) {
-        button_state = lbs_cb.${charName}_cb(data, len);
+    if (${charCbName(charName, 'read')}) {
+        button_state = ${charCbName(charName, 'read')}(data, len);
         return bt_gatt_attr_read(
             conn, attr, buf, len, offset, data, sizeof(*data));
     }
 
     return 0;
 }
-#endif // ${macroName}
 
 `
             );
@@ -308,9 +358,16 @@ static ssize_t read_${charName}(
 
     // service declaration
 
+    // svc.attrs[index] の値
+    //      [0] Service Declaration
+    //      [+1] xxx Characteristic Declaration
+    //      [+1] xxx Characteristic Value
+    //      [+1] CCCD
+    let attributeIndex = 0;
+    const attributeMap = new Map();
     sourceFile.write(`// ${serviceUpperName} Service Declaration
 BT_GATT_SERVICE_DEFINE(
-    ${serviceLowerName}_svc,
+    ${svcName},
     BT_GATT_PRIMARY_SERVICE(${serviceUuidName}),
 `
     );
@@ -334,6 +391,9 @@ BT_GATT_SERVICE_DEFINE(
         if (ch.indication) {
             props.push('BT_GATT_CHRC_INDICATE');
         }
+        if (perms.length === 0) {
+            perms.push('BT_GATT_PERM_NONE');
+        }
 
         sourceFile.write(`
     // ${charUpperName} Characteristic
@@ -345,19 +405,99 @@ BT_GATT_SERVICE_DEFINE(
         // Permissions
         ${perms.join(' | ')},
         // Characteristic Attribute read callback
-        ${(ch.read?.enable) ? `read_${charName}` : 'NULL'},
+        ${(ch.read?.enable) ? `${charRead(charName)}` : 'NULL'},
         // Characteristic Attribute write callback
-        ${(ch.write?.enable) ? `write_${charName}` : 'NULL'},
+        ${(ch.write?.enable) ? `${charWrite(charName)}` : 'NULL'},
         // Characteristic Attribute user data(TODO: modify)
-        ${(ch.read?.enable) ? `&${charName}_state` : 'NULL'},
+        ${(ch.read?.enable) ? `&${charStatus(charName)}` : 'NULL'},
     ),
 `
-        )
+        );
+        // 
+        attributeIndex += 2; // Characteristic Declaration と Value
+
+        if (ch.notification || ch.indication) {
+            sourceFile.write(`
+    // ${charUpperName} Client Characteristic Configuration Descriptor
+    BT_GATT_CCC(
+        ${charName}_ccc_cfg_changed,
+        BT_GATT_PERM_READ | BT_GATT_PERM_WRITE
+    ),
+`
+            );
+            // 
+            attributeMap.set(charName, attributeIndex);
+            attributeIndex++;
+        }
     }
 
     sourceFile.write(`);
+
+
+/*
+ * Functions
+ */
+
+int ${serviceLowerName}_init(${serviceCbTypeName(serviceLowerName)} *callbacks)
+{
+    ${serviceCbValueName(serviceLowerName)} = *callbacks;
+    return -ENOSYS;
+}
+
 `
     );
+
+    for (const ch of conf.characteristics) {
+        const charName = ch.name.toLowerCase();
+
+        if (ch.notification) {
+            const funcName = `${serviceLowerName}_send_${charName}_notify`;
+
+            sourceFile.write(`/// @brief ${funcName} sends the value by notification through ${charName} characteristic.
+// TODO: Modifying parameters
+int ${funcName}(const uint8_t *data, uint16_t len)
+{
+    if (!${charNotify(charName)}) {
+        LOG_ERR("${funcName}: notification not enabled.");
+        return -EACCES;
+    }
+
+    // TODO: Modify
+    return bt_gatt_notify(
+        NULL,
+        &${svcName}[${attributeMap.get(charName)}],
+        &${charStatus(charName)},
+        sizeof(${charStatus(charName)}));
+}
+
+`
+            );
+        }
+        if (ch.indication) {
+            const funcName = `${serviceLowerName}_send_${charName}_indicate`;
+
+            sourceFile.write(`/// @brief ${funcName} sends the value by indication through ${charName} characteristic.
+// TODO: Modifying parameters
+int ${funcName}(const uint8_t *data, uint16_t len)
+{
+    if (!${charIndicate(charName)}) {
+        LOG_ERR("${funcName}: indicate not enabled.");
+        return -EACCES;
+    }
+
+    // TODO: Modify
+    ${charIndicateParam(charName)}.attr = ${svcName}.attrs[${attributeMap.get(charName)}];
+    ${charIndicateParam(charName)}.func = ;
+    ${charIndicateParam(charName)}.destroy = NULL;
+    ${charIndicateParam(charName)}.data = &${charStatus(charName)};
+    ${charIndicateParam(charName)}.len = sizeof(${charStatus(charName)});
+    return bt_gatt_indicate(NULL, &${charIndicateParam(charName)});
+}
+
+`
+            );
+        }
+    }
 
 }
 
