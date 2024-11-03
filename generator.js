@@ -3,14 +3,11 @@ const fs = require('fs');
 const confText = fs.readFileSync('config-sample.json', 'utf-8');
 const conf = JSON.parse(confText);
 
-const DEFAULT_UUID_PREFIX = 'BT_UUID_';
-
 function generateHeaderFile(conf) {
     const headerFile = fs.createWriteStream('generated/' + conf.filename + '.h');
 
     const includeGuard = `${conf.filename.toUpperCase()}_H_`;
-    const prefix = conf.prefix.length > 0 ? `${conf.prefix.toUpperCase()}_` : DEFAULT_UUID_PREFIX;
-    const serviceName = conf.service.name.toUpperCase();
+    const serviceUpperName = conf.service.name.toUpperCase();
     const serviceLowerName = conf.service.name.toLowerCase();
     const base_uuid = conf.base_uuid.split('-');
     const serviceUuid = Array.from(base_uuid);
@@ -30,38 +27,8 @@ extern "C" {
 
 #include <stdint.h>
 
-#include <zephyr/types.h>
-
-/*
- * Service
- */
-
-/// @brief ${conf.service.comment}
-#define ${prefix}${serviceName}_VAL
-    BT_UUID_128_ENCODE(0x${serviceUuid[0]}, 0x${serviceUuid[1]}, 0x${serviceUuid[2]}, 0x${serviceUuid[3]}, 0x${serviceUuid[4]})
-#define ${prefix}${serviceName} BT_UUID_DECLARE_128(${prefix}${serviceName}_VAL)
-
-
-/*
- * Characteristics
- */
-
 `
     );
-
-    for (const ch of conf.characteristics) {
-        const charName = ch.name.toUpperCase();
-        const uuid = Array.from(base_uuid);
-        uuid[0] = ch.uuid;
-
-        headerFile.write(`/// @brief ${ch.comment}
-#define ${prefix}${serviceName}_${charName}_VAL
-    BT_UUID_128_ENCODE(0x${uuid[0]}, 0x${uuid[1]}, 0x${uuid[2]}, 0x${uuid[3]}, 0x${uuid[4]})
-#define ${prefix}${serviceName}_${charName} BT_UUID_DECLARE_128(${prefix}${serviceName}_${charName}_VAL)
-
-`
-        );
-    }
 
     headerFile.write(`
 /*
@@ -84,7 +51,7 @@ typedef int (*${charName}_t)(const uint8_t *data, uint16_t len);
         );
     }
 
-    headerFile.write(`/// @brief Callback struct used by the ${serviceName} Service.
+    headerFile.write(`/// @brief Callback struct used by the ${serviceUpperName} Service.
 struct ${serviceLowerName}_cb {
 `);
 
@@ -102,7 +69,7 @@ struct ${serviceLowerName}_cb {
 `
     );
 
-    headerFile.write(`/// @brief Initialize the ${serviceName} Service.
+    headerFile.write(`/// @brief Initialize the ${serviceUpperName} Service.
 int ${serviceLowerName}_init(struct ${serviceLowerName}_cb *callbacks);
 
 `
@@ -144,9 +111,12 @@ int ${funcName}(const uint8_t *data, uint16_t len);
 function generateSourceFile(conf) {
     const sourceFile = fs.createWriteStream('generated/' + conf.filename + '.c');
 
-    const prefix = conf.prefix.length > 0 ? `${conf.prefix.toUpperCase()}_` : DEFAULT_UUID_PREFIX;
-    const serviceName = conf.service.name.toUpperCase();
+    const serviceUpperName = conf.service.name.toUpperCase();
     const serviceLowerName = conf.service.name.toLowerCase();
+    const serviceUuidName = `UUID_${serviceUpperName}`;
+    const base_uuid = conf.base_uuid.split('-');
+    const serviceUuid = Array.from(base_uuid);
+    serviceUuid[0] = conf.service.uuid;
     const cbValueName = `${serviceLowerName}_cb`;
 
     sourceFile.write(`/**
@@ -173,7 +143,30 @@ function generateSourceFile(conf) {
 
 LOG_MODULE_DECLARE(${conf.service.name}_Service);
 
+/*
+ * UUID
+ */
+
+/// @brief ${serviceUpperName} Service UUID
+#define ${serviceUuidName}_VAL
+    BT_UUID_128_ENCODE(0x${serviceUuid[0]}, 0x${serviceUuid[1]}, 0x${serviceUuid[2]}, 0x${serviceUuid[3]}, 0x${serviceUuid[4]})
+#define ${serviceUuidName} BT_UUID_DECLARE_128(${serviceUuidName}_VAL)
+
 `);
+
+    for (const ch of conf.characteristics) {
+        const charName = ch.name.toUpperCase();
+        const uuid = Array.from(base_uuid);
+        uuid[0] = ch.uuid;
+
+        sourceFile.write(`/// @brief ${charName} Characteristic UUID
+#define ${serviceUuidName}_${charName}_VAL
+    BT_UUID_128_ENCODE(0x${uuid[0]}, 0x${uuid[1]}, 0x${uuid[2]}, 0x${uuid[3]}, 0x${uuid[4]})
+#define ${serviceUuidName}_${charName} BT_UUID_DECLARE_128(${serviceUuidName}_${charName}_VAL)
+
+`
+        );
+    }
 
     for (const ch of conf.characteristics) {
         const charName = ch.name.toLowerCase();
@@ -281,7 +274,7 @@ static struct bt_gatt_indicate_params indicate_${charName}_params;
 
     for (const ch of conf.characteristics) {
         const charName = ch.name.toLowerCase();
-        const macroName = `CONFIG_${serviceName}_POLL_${charName.toUpperCase()}`;
+        const macroName = `CONFIG_${serviceUpperName}_POLL_${charName.toUpperCase()}`;
 
         if (ch.read?.enable) {
             sourceFile.write(`#ifdef ${macroName}
@@ -315,10 +308,10 @@ static ssize_t read_${charName}(
 
     // service declaration
 
-    sourceFile.write(`// ${serviceName} Service Declaration
+    sourceFile.write(`// ${serviceUpperName} Service Declaration
 BT_GATT_SERVICE_DEFINE(
     ${serviceLowerName}_svc,
-    BT_GATT_PRIMARY_SERVICE(${prefix}${serviceName}),
+    BT_GATT_PRIMARY_SERVICE(${serviceUuidName}),
 `
     );
 
@@ -346,7 +339,7 @@ BT_GATT_SERVICE_DEFINE(
     // ${charUpperName} Characteristic
     BT_GATT_CHARACTERISTIC(
         // UUID
-        ${prefix}${serviceName}_${charUpperName},
+        ${serviceUuidName}_${charUpperName},
         // Properties
         ${props.join(' | ')},
         // Permissions

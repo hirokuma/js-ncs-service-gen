@@ -1,23 +1,19 @@
 [
     {
         "filename": "newlbs",
-        "file_header_comment": "LBS Service",
-        "prefix": "ABC",
+        "file_header_comment": "LED Button Service",
         "base_uuid": "xxxxxxxx-1212-efde-1523-785feabcd123",
 
         "service": {
-            "name": "LBS",
-            "comment": "LED Button Service",
+            "name": "lbs",
             "uuid": "00001523"
         },
         "characteristics": [
             {
-                "name": "BUTTON",
-                "comment": "Button characteristic",
+                "name": "button",
                 "uuid": "00001524",
                 "read": {
-                    "enable": true,
-                    "polling": true
+                    "enable": true
                 },
                 "write": {
                     "enable": false
@@ -26,8 +22,7 @@
                 "indication": false
             },
             {
-                "name": "LED",
-                "comment": "LED characteristic",
+                "name": "led",
                 "uuid": "00001525",
                 "read": {
                     "enable": false
