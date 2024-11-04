@@ -1,6 +1,6 @@
 [
     {
-        "filename": "newlbs",
+        "filename": "my_lbs",
         "file_header_comment": "LED Button Service",
         "base_uuid": "xxxxxxxx-1212-efde-1523-785feabcd123",
 
@@ -16,7 +16,8 @@
                     "enable": false
                 },
                 "read": {
-                    "enable": true
+                    "enable": true,
+                    "length": 1
                 },
                 "notification": false,
                 "indication": true
@@ -25,10 +26,12 @@
                 "name": "led",
                 "uuid": "00001525",
                 "write": {
-                    "enable": true
+                    "enable": true,
+                    "check_length": 1,
+                    "check_offset": 0
                 },
                 "read": {
-                    "enable": true
+                    "enable": false
                 },
                 "notification": false,
                 "indication": false
@@ -40,24 +43,12 @@
                     "enable": false
                 },
                 "read": {
-                    "enable": false
+                    "enable": false,
+                    "length": 4
                 },
                 "notification": true,
                 "indication": false
             }
         ]
-    },
-    {
-        "filename": "pwr",
-        "file_header_comment": "",
-        "prefix": "",
-        "base_uuid": "xxxxxxxx-1212-efde-1523-785feabcd123",
-
-        "service": {
-            "name": "PWR",
-            "comment": "Power Service",
-            "uuid": "00001523"
-        },
-        "characteristics": []
     }
 ]

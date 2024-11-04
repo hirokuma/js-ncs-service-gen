@@ -76,7 +76,7 @@ ${charStatusTypeName(serviceLower, charName)} {
     // TODO: add your parameters...
 
     // serialized data for Read request
-    uint8_t serialized[1];
+    uint8_t serialized[${ch.read.length}];
 };
 `
             );
@@ -194,7 +194,7 @@ function generateSourceFile(conf) {
 
 #include "${conf.filename}.h"
 
-LOG_MODULE_REGISTER(${serviceUpper}_Service, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(${serviceUpper}_Service, LOG_LEVEL_DBG);
 
 /*
  * UUID
@@ -269,6 +269,7 @@ static ${serviceCbTypeName(serviceLower)} ${serviceCbValueName(serviceLower)};
 static void ${charName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
     ${charNotify(charName)} = (value == BT_GATT_CCC_NOTIFY);
+    LOG_DBG("${charUpperName} notification flag: %d", ${charNotify(charName)});
 }
 
 `
@@ -281,6 +282,7 @@ static void ${charName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_
 static void ${charName}_ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
     ${charIndicate(charName)} = (value == BT_GATT_CCC_INDICATE);
+    LOG_DBG("${charUpperName} indication flag: %d", ${charIndicate(charName)});
 }
 
 static void ${charName}_indicate_callback(struct bt_conn *conn, struct bt_gatt_indicate_params *params, uint8_t err)
@@ -313,24 +315,26 @@ static ssize_t ${charWrite(charName)}(
 {
 	LOG_DBG("Attribute write ${charName}, handle: %u, conn: %p", attr->handle, (const void *)conn);
 
-    // TODO: check len
+${ch.write.check_length > 0 ? 
+`    // TODO: Check length
     if (len != 1) {
         LOG_ERR("Write ${charName}: Incorrect data length(%u)", len);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
-
-    // TODO: check offset
+` : ''}
+${ch.write.check_offset >= 0 ?
+`    // TODO: Check offset
     if (offset != 0) {
         LOG_ERR("Write ${charName}: Incorrect data offset(%u)", offset);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 	}
-
+` : ''}
     // TODO: Modify callback
     if (${charCbValue(charName, 'write')}) {
         int ret = ${charCbValue(charName, 'write')}(buf, len, offset);
         if (ret != 0) {
             LOG_ERR("Write ${charName}: callback error happen: %d", ret);
-            return ret;
+            return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
         }
     }
 
@@ -367,10 +371,10 @@ static ssize_t ${charRead(charName)}(
         int ret = ${charCbValue(charName, 'read')}(buf, len, offset, &${charStatus(charName)});
         if (ret != 0) {
             LOG_ERR("Read ${charName}: callback error happen: %d", ret);
-            return (ssize_t)ret;
+            return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
         }
         return bt_gatt_attr_read(
-            conn, attr, buf, len, offset, &${charStatus(charName)}, sizeof(&${charStatus(charName)}));
+            conn, attr, buf, len, offset, ${charStatus(charName)}.serialized, sizeof(${charStatus(charName)}.serialized));
     }
 
     return 0;
@@ -466,7 +470,10 @@ BT_GATT_SERVICE_DEFINE(
 int ${serviceLower}_init(${serviceCbTypeName(serviceLower)} *callbacks)
 {
     ${serviceCbValueName(serviceLower)} = *callbacks;
-    return -ENOSYS;
+
+    // TODO: add your code
+
+    return 0;
 }
 
 `
@@ -488,11 +495,15 @@ int ${funcName}(const uint8_t *data, uint16_t len)
     }
 
     // TODO: Modify
-    return bt_gatt_notify(
+    int ret = bt_gatt_notify(
         NULL,
         &${svcName}.attrs[${attributeMap.get(charName)}],
-        &${charStatus(charName)}.serialized,
-        sizeof(${charStatus(charName)}.serialized));
+        data,
+        len);
+    if (ret != 0) {
+        LOG_ERR("${funcName}: fail bt_gatt_notify(ret=%d).", ret);
+    }
+    return ret;
 }
 
 `
@@ -512,11 +523,15 @@ int ${funcName}(const uint8_t *data, uint16_t len)
 
     // TODO: Modify
     ${charIndicateParam(charName)}.attr = &${svcName}.attrs[${attributeMap.get(charName)}];
-    ${charIndicateParam(charName)}.func = NULL;
+    ${charIndicateParam(charName)}.func = ${charName}_indicate_callback;
     ${charIndicateParam(charName)}.destroy = NULL;
-    ${charIndicateParam(charName)}.data = &${charStatus(charName)}.serialized;
-    ${charIndicateParam(charName)}.len = sizeof(${charStatus(charName)}.serialized);
-    return bt_gatt_indicate(NULL, &${charIndicateParam(charName)});
+    ${charIndicateParam(charName)}.data = data;
+    ${charIndicateParam(charName)}.len = len;
+    int ret = bt_gatt_indicate(NULL, &${charIndicateParam(charName)});
+    if (ret != 0) {
+        LOG_ERR("${funcName}: fail bt_gatt_indicate(ret=%d).", ret);
+    }
+    return ret;
 }
 `
             );
