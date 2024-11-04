@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const confText = fs.readFileSync('config-sample.json', 'utf-8');
+const confText = fs.readFileSync('config.json', 'utf-8');
 const conf = JSON.parse(confText);
 
 const serviceCbTypeName = (serviceName) => `struct ${serviceName.toLowerCase()}_cb`;
