@@ -8,7 +8,8 @@ const serviceCbValueName = (serviceName) => `${serviceName.toLowerCase()}_cb`;
 const charStatusTypeName = (serviceName, charName) => `struct ${serviceName.toLowerCase()}_${charName.toLowerCase()}_status`;
 
 function generateHeaderFile(conf) {
-    const headerFile = fs.createWriteStream('generated/' + conf.filename + '.h');
+    const fileName = conf.filename + '.h';
+    const headerFile = fs.createWriteStream('generated/' + fileName);
 
     const includeGuard = `${conf.filename.toUpperCase()}_H_`;
     const serviceUpper = conf.service.name.toUpperCase();
@@ -20,8 +21,8 @@ function generateHeaderFile(conf) {
     serviceUuid[0] = conf.service.uuid;
 
     headerFile.write(`/**
- * @file
- * ${conf.file_header_comment}
+ * @file ${fileName}
+ * @brief ${conf.file_header_comment}
  */
 
 #ifndef ${includeGuard}
@@ -32,6 +33,8 @@ extern "C" {
 #endif // __cplusplus
 
 #include <stdint.h>
+
+#include <zephyr/bluetooth/uuid.h>
 
 /*
  * UUID
@@ -154,7 +157,8 @@ int ${funcName}(const uint8_t *data, uint16_t len);
 }
 
 function generateSourceFile(conf) {
-    const sourceFile = fs.createWriteStream('generated/' + conf.filename + '.c');
+    const fileName = conf.filename + '.c';
+    const sourceFile = fs.createWriteStream('generated/' + fileName);
 
     const serviceUpper = conf.service.name.toUpperCase();
     const serviceLower = conf.service.name.toLowerCase();
@@ -173,8 +177,8 @@ function generateSourceFile(conf) {
     const charWrite = (name) => `write_${name}`;
 
     sourceFile.write(`/**
- * @file
- * ${conf.file_header_comment}
+ * @file ${fileName}
+ * @brief ${conf.file_header_comment}
  */
 
 #include <stddef.h>
@@ -224,7 +228,7 @@ LOG_MODULE_REGISTER(${serviceUpper}_Service, LOG_LEVEL_DBG);
         const charName = ch.name.toLowerCase();
         const charUpperName = ch.name.toUpperCase();
 
-        if (ch.read?.enable || ch.notification || ch.indication) {
+        if (ch.read?.enable) {
             sourceFile.write(`
 /// @brief ${charUpperName} Characteristic read status
 // TODO: Modify
@@ -389,9 +393,9 @@ static ssize_t ${charRead(charName)}(
 
     // svc.attrs[index] の値
     //      [0] Service Declaration
-    //      [+1] xxx Characteristic Declaration
-    //      [+1] xxx Characteristic Value
-    //      [+1] CCCD
+    //      [+1]   Characteristic declaration
+    //      [+1]   Characteristic Value declaration
+    //      [+1]   Characteristic descriptor declaration
     let attributeIndex = 0;
     const attributeMap = new Map();
     sourceFile.write(`// ${serviceUpper} Service Declaration
@@ -438,7 +442,7 @@ BT_GATT_SERVICE_DEFINE(
         // Characteristic Attribute write callback
         ${(ch.write?.enable) ? `${charWrite(charName)}` : 'NULL'},
         // Characteristic Attribute user data(TODO: modify)
-        ${(ch.read?.enable) ? `${charStatus(charName)}.serialized` : 'NULL'}
+        NULL
     ),
 `
         );
