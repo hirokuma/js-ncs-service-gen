@@ -60,7 +60,7 @@ extern "C" {
         const charName = ch.name.toLowerCase();
         const charUpperName = ch.name.toUpperCase();
         const charCbValue = (rw) => `${charName}_${rw}_cb`;
-        const charCbType = (rw) => `${charCbValue(rw)}_t`;
+        const charCbType = (rw) => `${serviceLower}_${charCbValue(rw)}_t`;
 
         if (ch.write?.enable) {
             headerFile.write(`/// @brief Write callback type for ${charUpperName} Characteristic.
@@ -69,7 +69,7 @@ typedef int (*${charCbType('write')})(const void *data, uint16_t len, uint16_t o
 
 `
             );
-            charCbNames.push(charCbValue('write'));
+            charCbNames.push(`${charCbType('write')} ${charCbValue('write')}`);
         }
         if (ch.read?.enable || ch.notification || ch.indication) {
             headerFile.write(`
@@ -93,7 +93,7 @@ typedef int (*${charCbType('read')})(const void *data, uint16_t len, uint16_t of
 
 `
             );
-            charCbNames.push(charCbValue('read'));
+            charCbNames.push(`${charCbType('read')} ${charCbValue('read')}`);
         }
     }
 
@@ -103,7 +103,7 @@ ${serviceCbTypeName(serviceLower)} {
 `);
 
     for (const cb of charCbNames) {
-        headerFile.write(`    ${cb}_t ${cb};
+        headerFile.write(`    ${cb};
 `);
     }
 
@@ -118,7 +118,7 @@ ${serviceCbTypeName(serviceLower)} {
     );
 
     headerFile.write(`/// @brief Initialize the ${serviceUpper} Service.
-int ${serviceLower}_init(${serviceCbTypeName(serviceLower)} *callbacks);
+int ${serviceLower}_init(const ${serviceCbTypeName(serviceLower)} *callbacks);
 
 `
     );
@@ -319,7 +319,7 @@ static ssize_t ${charWrite(charName)}(
 {
 	LOG_DBG("Attribute write ${charName}, handle: %u, conn: %p", attr->handle, (const void *)conn);
 
-${ch.write.check_length > 0 ? 
+${ch.write.check_length > 0 ?
 `    // TODO: Check length
     if (len != 1) {
         LOG_ERR("Write ${charName}: Incorrect data length(%u)", len);
@@ -446,7 +446,7 @@ BT_GATT_SERVICE_DEFINE(
     ),
 `
         );
-        // 
+        //
         attributeIndex += 2; // Characteristic Declaration と Value
 
         if (ch.notification || ch.indication) {
@@ -458,7 +458,7 @@ BT_GATT_SERVICE_DEFINE(
     ),
 `
             );
-            // 
+            //
             attributeMap.set(charName, attributeIndex);
             attributeIndex++;
         }
@@ -471,7 +471,7 @@ BT_GATT_SERVICE_DEFINE(
  * Functions
  */
 
-int ${serviceLower}_init(${serviceCbTypeName(serviceLower)} *callbacks)
+int ${serviceLower}_init(const ${serviceCbTypeName(serviceLower)} *callbacks)
 {
     ${serviceCbValueName(serviceLower)} = *callbacks;
 
