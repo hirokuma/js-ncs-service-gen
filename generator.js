@@ -17,8 +17,15 @@ function generateHeaderFile(conf) {
     const serviceUuidName = `UUID_${serviceUpper}`;
     const serviceDefValName = `${serviceUuidName}_VAL`;
     const base_uuid = conf.base_uuid.split('-');
-    const serviceUuid = Array.from(base_uuid);
-    serviceUuid[0] = conf.service.uuid;
+    const baseUuid = Array.from(base_uuid);
+
+    let charUuids = '';
+    for (const ch of conf.characteristics) {
+      const charUpperName = ch.name.toUpperCase();
+      charUuids = charUuids + ` *  ${charUpperName} Characteristic UUID:
+ *      ${ch.uuid}-${baseUuid[1]}-${baseUuid[2]}-${baseUuid[3]}-${baseUuid[4]}
+`;
+    }
 
     headerFile.write(`/**
  * @file ${fileName}
@@ -38,11 +45,14 @@ extern "C" {
 
 /*
  * UUID
- */
+ *
+ *  ${serviceUpper} Service:
+ *      ${conf.service.uuid}-${baseUuid[1]}-${baseUuid[2]}-${baseUuid[3]}-${baseUuid[4]}
+${charUuids} */
 
 /// @brief ${serviceUpper} Service UUID
 #define ${serviceDefValName} \\
-    BT_UUID_128_ENCODE(0x${serviceUuid[0]}, 0x${serviceUuid[1]}, 0x${serviceUuid[2]}, 0x${serviceUuid[3]}, 0x${serviceUuid[4]})
+    BT_UUID_128_ENCODE(0x${conf.service.uuid}, 0x${baseUuid[1]}, 0x${baseUuid[2]}, 0x${baseUuid[3]}, 0x${baseUuid[4]})
 
 `
     );
@@ -165,9 +175,6 @@ function generateSourceFile(conf) {
     const serviceUuidName = `UUID_${serviceUpper}`;
     const serviceDefValName = `${serviceUuidName}_VAL`;
     const svcName = `${serviceLower}_svc`;
-    const base_uuid = conf.base_uuid.split('-');
-    const serviceUuid = Array.from(base_uuid);
-    serviceUuid[0] = conf.service.uuid;
     const charCbValue = (name, rw) => `${serviceCbValueName(serviceLower)}.${name}_${rw}_cb`;
     const charNotify = (name) => `notify_${name}_enabled`;
     const charIndicate = (name) => `indicate_${name}_enabled`;
@@ -208,16 +215,16 @@ LOG_MODULE_REGISTER(${serviceUpper}_Service, LOG_LEVEL_DBG);
 
 `);
 
+    const base_uuid = conf.base_uuid.split('-');
     for (const ch of conf.characteristics) {
         const charUpperName = ch.name.toUpperCase();
-        const uuid = Array.from(base_uuid);
-        uuid[0] = ch.uuid;
+        const baseUuid = Array.from(base_uuid);
         const defDecName = `${serviceUuidName}_${charUpperName}`;
         const defValName = `${defDecName}_VAL`;
 
         sourceFile.write(`/// @brief ${charUpperName} Characteristic UUID
 #define ${defValName} \\
-    BT_UUID_128_ENCODE(0x${uuid[0]}, 0x${uuid[1]}, 0x${uuid[2]}, 0x${uuid[3]}, 0x${uuid[4]})
+    BT_UUID_128_ENCODE(0x${ch.uuid}, 0x${baseUuid[1]}, 0x${baseUuid[2]}, 0x${baseUuid[3]}, 0x${baseUuid[4]})
 #define ${defDecName} BT_UUID_DECLARE_128(${defValName})
 
 `
